@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MemoryRegionType"],"struct":["BootInfo","FrameRange","MemoryMap","MemoryRegion","TlsTemplate"]};

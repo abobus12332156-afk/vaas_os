@@ -1,0 +1,13 @@
+[build]
+target = "x86_64-unknown-none"
+
+[unstable]
+build-std = ["core", "compiler_builtins", "alloc"]
+build-std-features = ["compiler-builtins-mem"]
+
+[target.'cfg(target_os = "none")']
+rustflags = [
+    "-C", "link-arg=-nostdlib",
+    "-C", "relocation-model=static", # Насильно отключаем PIE/PIC, делаем код статичным
+    "-C", "code-model=kernel",       # Говорим, что собираем код уровня ядра
+]

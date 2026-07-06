@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":[["entry_point",1]],"mod":["bootinfo"]};

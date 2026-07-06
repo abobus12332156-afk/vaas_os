@@ -1,0 +1,7 @@
+cargo:rerun-if-changed=/home/nikita/vaas_os/Cargo.toml
+cargo:rustc-link-search=native=/home/nikita/vaas_os/target/bootimage/bootloader/x86_64-bootloader/release/build/bootloader-42028c94e10cfd09/out
+cargo:rustc-link-lib=static=kernel_bin-vaas_os
+cargo:rerun-if-env-changed=KERNEL
+cargo:rerun-if-env-changed=KERNEL_MANIFEST
+cargo:rerun-if-changed=/home/nikita/vaas_os/target/x86_64-unknown-none/debug/vaas_os
+cargo:rerun-if-changed=build.rs
