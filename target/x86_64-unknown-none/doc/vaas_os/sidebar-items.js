@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["__impl_start","_start","match_color","panic","sys_reboot","sys_shutdown"],"macro":[["print",1],["println",1]],"mod":["interrupts","vga_buffer"],"static":["LAST_CMD_LEN","LAST_COMMAND"]};

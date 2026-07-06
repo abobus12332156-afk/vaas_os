@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["PrivilegeLevel"],"macro":[["set_general_handler",1],["software_interrupt",1]],"mod":["addr","instructions","registers","structures"]};
