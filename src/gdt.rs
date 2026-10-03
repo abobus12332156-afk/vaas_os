@@ -1,7 +1,7 @@
-use x86_64::VirtAddr;
-use x86_64::structures::tss::TaskStateSegment;
-use x86_64::structures::gdt::{GlobalDescriptorTable, Descriptor, SegmentSelector};
 use spin::Lazy;
+use x86_64::VirtAddr;
+use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
+use x86_64::structures::tss::TaskStateSegment;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0; // Индекс резервного стека
 
@@ -19,14 +19,19 @@ static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
     tss
 });
 
-// Настраиваем саму таблицу GDT
 // Настраиваем таблицу GDT под новые реалии x86_64
 static GDT: Lazy<(GlobalDescriptorTable, Selectors)> = Lazy::new(|| {
     let mut gdt = GlobalDescriptorTable::new();
     // ИСПРАВЛЕНО: используем add_entry вместо append
     let code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
     let tss_selector = gdt.add_entry(Descriptor::tss_segment(&TSS));
-    (gdt, Selectors { code_selector, tss_selector })
+    (
+        gdt,
+        Selectors {
+            code_selector,
+            tss_selector,
+        },
+    )
 });
 struct Selectors {
     code_selector: SegmentSelector,
@@ -34,8 +39,8 @@ struct Selectors {
 }
 
 pub fn init() {
-    use x86_64::instructions::tables::load_tss;
     use x86_64::instructions::segmentation::{CS, Segment};
+    use x86_64::instructions::tables::load_tss;
 
     GDT.0.load();
     unsafe {

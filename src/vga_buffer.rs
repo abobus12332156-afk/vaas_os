@@ -73,83 +73,90 @@ impl Writer {
         match byte {
             b'\n' => self.new_line(),
             b'\t' => {
-            // Вычисляем, сколько пробелов нужно до следующей метки табуляции
-            let spaces = 4 - (self.column_position % 4);
-            
-            for _ in 0..spaces {
+                let spaces = 4 - (self.column_position % 4);
+                for _ in 0..spaces {
+                    self.write_byte(b' ');
+                }
+            }
+            byte => {
                 if self.column_position >= BUFFER_WIDTH {
                     self.new_line();
                 }
 
-                let row = BUFFER_HEIGHT - 1;
+                let row = self.row_position;
                 let col = self.column_position;
-                let color_code = self.color_code;
 
-                // ОБЯЗАТЕЛЬНО пишем пробел в память, чтобы стереть то, что там было раньше
                 unsafe {
                     (*self.buffer).chars[row][col] = ScreenChar {
-                        ascii_character: b' ', // Пишем пустой символ
-                        color_code,
+                        ascii_character: byte,
+                        color_code: self.color_code,
                     };
                 }
-                
+
                 self.column_position += 1;
+                self.update_hardware_cursor();
             }
-        }
-            byte => {
-            if self.column_position >= BUFFER_WIDTH {
-                self.new_line();
-            }
-
-            let row = BUFFER_HEIGHT - 1;
-            let col = self.column_position;
-
-            let color_code = self.color_code;
-            
-            unsafe {
-                // Просто присваиваем значение ячейке памяти напрямую
-                (*self.buffer).chars[row][col] = ScreenChar {
-                    ascii_character: byte,
-                    color_code,
-                };
-            }
-            self.column_position += 1;
-        }
         }
     }
 
     /// Перенос строки и скроллинг экрана вверх
     fn new_line(&mut self) {
-    // 1. Сдвигаем все строки со 2-й по последнюю на одну позицию вверх
-    for row in 1..BUFFER_HEIGHT {
+        self.column_position = 0;
+
+        if self.row_position + 1 < BUFFER_HEIGHT {
+            self.row_position += 1;
+        } else {
+            for row in 1..BUFFER_HEIGHT {
+                for col in 0..BUFFER_WIDTH {
+                    unsafe {
+                        let character = (*self.buffer).chars[row][col];
+                        (*self.buffer).chars[row - 1][col] = character;
+                    }
+                }
+            }
+
+            self.clear_row(BUFFER_HEIGHT - 1);
+        }
+
+        self.update_hardware_cursor();
+    }
+
+    // Вспомогательный метод для очистки конкретной строки пробелами
+    fn clear_row(&mut self, row: usize) {
+        let blank = ScreenChar {
+            ascii_character: b' ',
+            color_code: self.color_code,
+        };
         for col in 0..BUFFER_WIDTH {
             unsafe {
-                // Копируем символ из нижней строки в верхнюю
-                let character = (*self.buffer).chars[row][col];
-                (*self.buffer).chars[row - 1][col] = character;
+                (*self.buffer).chars[row][col] = blank;
             }
         }
     }
 
-    // 2. Очищаем самую нижнюю строку, чтобы на ней можно было писать заново
-    self.clear_row(BUFFER_HEIGHT - 1);
-    
-    // Возвращаем курсор в начало нижней строки
-    self.column_position = 0;
-}
+    fn update_hardware_cursor(&self) {
+        use x86_64::instructions::port::Port;
 
-// Вспомогательный метод для очистки конкретной строки пробелами
-fn clear_row(&mut self, row: usize) {
-    let blank = ScreenChar {
-        ascii_character: b' ',
-        color_code: self.color_code,
-    };
-    for col in 0..BUFFER_WIDTH {
+        let position = if self.column_position >= BUFFER_WIDTH {
+            if self.row_position + 1 < BUFFER_HEIGHT {
+                (self.row_position + 1) * BUFFER_WIDTH
+            } else {
+                BUFFER_HEIGHT * BUFFER_WIDTH - 1
+            }
+        } else {
+            self.row_position * BUFFER_WIDTH + self.column_position
+        } as u16;
+
+        let mut command_port = Port::new(0x3D4);
+        let mut data_port = Port::new(0x3D5);
+
         unsafe {
-            (*self.buffer).chars[row][col] = blank;
+            command_port.write(0x0F);
+            data_port.write(position as u8);
+            command_port.write(0x0E);
+            data_port.write((position >> 8) as u8);
         }
     }
-}
 
     /// Вывод целой строки
     pub fn write_string(&mut self, s: &str) {
@@ -163,41 +170,38 @@ fn clear_row(&mut self, row: usize) {
 
     /// Удаление последнего символа (обработка Backspace)
     pub fn delete_last_char(&mut self) {
-        // Так как мы всегда пишем на самой нижней строке:
-        let row = BUFFER_HEIGHT - 1;
-
-        if self.column_position > 0 {
-            // Если мы не в самом начале строки, просто двигаемся влево
-            self.column_position -= 1;
-            let col = self.column_position;
-            let color_code = self.color_code;
-
-            unsafe {
-                // Используем write_volatile для bare-metal памяти VGA
-                core::ptr::write_volatile(
-                    &mut (*self.buffer).chars[row][col],
-                    ScreenChar {
-                        ascii_character: b' ', // Затираем пробелом
-                        color_code,
-                    },
-                );
+        if self.column_position == 0 {
+            if self.row_position == 0 {
+                return;
             }
-        } else {
-            // Идея на будущее: если column_position == 0, то в полноценном Linux TTY
-            // курсор прыгает на конец ПРЕДЫДУЩЕЙ строки.
-            // Но так как у тебя включен постоянный скроллинг вверх и данные из прошлых строк
-            // улетели, прыгать на строку выше (row - 1) небезопасно, там текст уже "запечен".
-            // Поэтому здесь на самом начале строки (vaas_os> ) мы просто ничего не делаем,
-            // чтобы не стереть сам промпт шелла.
+
+            self.row_position -= 1;
+            self.column_position = BUFFER_HEIGHT;
         }
+
+        self.column_position -= 1;
+
+        unsafe {
+            core::ptr::write_volatile(
+                &mut (self.buffer).chars[self.row_position][self.column_position],
+                ScreenChar {
+                    ascii_character: b' ',
+                    color_code: self.color_code,
+                },
+            );
+        }
+
+        self.update_hardware_cursor();
     }
 
     pub fn clear_screen(&mut self) {
         for row in 0..BUFFER_HEIGHT {
             self.clear_row(row);
         }
-        // row_position нам больше не нужен, но column_position сбрасываем в 0
+
+        self.row_position = 0;
         self.column_position = 0;
+        self.update_hardware_cursor();
     }
 
     pub fn set_color(&mut self, foreground: Color, background: Color) {

@@ -1,11 +1,11 @@
 use core::panic;
 
+use crate::gdt;
 use crate::print;
 use crate::println;
 use pic8259::{self, ChainedPics};
 use spin::Lazy;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
-use crate::gdt;
 
 // Базовое смещение для прерываний аппаратной части.
 // Векторы 0..31 заняты процессором под исключения. Мапим PIC на 32..47.
@@ -37,9 +37,10 @@ static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
 
     // Исключения процессора
     idt.breakpoint.set_handler_fn(breakpoint_handler);
-    
+
     // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ ОПРЕДЕЛЕНИЯ КОРНЯ ПРОБЛЕМЫ:
-    idt.general_protection_fault.set_handler_fn(general_protection_fault_handler);
+    idt.general_protection_fault
+        .set_handler_fn(general_protection_fault_handler);
     idt.page_fault.set_handler_fn(page_fault_handler);
 
     unsafe {
@@ -53,8 +54,6 @@ static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     idt[InterruptIndex::Keyboard.as_usize()].set_handler_fn(keyboard_handler);
 
     idt
-
-    
 });
 
 use x86_64::structures::idt::PageFaultErrorCode;

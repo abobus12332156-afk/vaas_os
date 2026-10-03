@@ -1,0 +1,1 @@
+/home/nikita/Rust_Projects/vaas_os/target/x86_64-unknown-none/release/vaas_os: /home/nikita/Rust_Projects/vaas_os/src/allocator.rs /home/nikita/Rust_Projects/vaas_os/src/gdt.rs /home/nikita/Rust_Projects/vaas_os/src/interrupts.rs /home/nikita/Rust_Projects/vaas_os/src/main.rs /home/nikita/Rust_Projects/vaas_os/src/memory.rs /home/nikita/Rust_Projects/vaas_os/src/vga_buffer.rs

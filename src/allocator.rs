@@ -1,10 +1,10 @@
 use x86_64::{
-    structures::paging::{
-        mapper::MapToError, FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB,
-    },
     VirtAddr,
+    structures::paging::{
+        FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB, mapper::MapToError,
+    },
 };
-// ИСПРАВЛЕНО: убрали лишнюю 's' на конце
+
 use linked_list_allocator::LockedHeap;
 
 #[global_allocator]
@@ -17,8 +17,6 @@ pub fn init_heap(
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) -> Result<(), MapToError<Size4KiB>> {
-    
-    // ИСПРАВЛЕНО: юзаем каноничный метод containing_address
     let page_range = {
         let heap_start = VirtAddr::new(HEAP_START as u64);
         let heap_end = heap_start + HEAP_SIZE - 1u64;
@@ -31,10 +29,9 @@ pub fn init_heap(
         let frame = frame_allocator
             .allocate_frame()
             .ok_or(MapToError::FrameAllocationFailed)?;
-        
-        // Тут всё ок, PageTableFlags подтянется из верхнего юзинга
+
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-        
+
         unsafe {
             mapper.map_to(page, frame, flags, frame_allocator)?.flush();
         }

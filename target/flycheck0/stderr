@@ -1,5 +1,13 @@
-   0.080647292s  INFO prepare_target{force=false package_id=vaas_os v0.1.0 (/home/nikita/vaas_os) target="vaas_os"}: cargo::core::compiler::fingerprint: fingerprint error for vaas_os v0.1.0 (/home/nikita/vaas_os)/Check { test: true }/TargetInner { name: "vaas_os", doc: true, ..: with_path("/home/nikita/vaas_os/src/main.rs", Edition2024) }
-   0.080691927s  INFO prepare_target{force=false package_id=vaas_os v0.1.0 (/home/nikita/vaas_os) target="vaas_os"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/nikita/vaas_os/target/x86_64-unknown-none/debug/.fingerprint/vaas_os-7877702ed7ed88b0/test-bin-vaas_os`
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on shared package cache
+   1.106430676s  INFO prepare_target{force=false package_id=vaas_os v0.1.0 (/home/nikita/vaas_os) target="vaas_os"}: cargo::core::compiler::fingerprint: fingerprint error for vaas_os v0.1.0 (/home/nikita/vaas_os)/Check { test: true }/TargetInner { name: "vaas_os", doc: true, ..: with_path("/home/nikita/vaas_os/src/main.rs", Edition2024) }
+   1.106443074s  INFO prepare_target{force=false package_id=vaas_os v0.1.0 (/home/nikita/vaas_os) target="vaas_os"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/nikita/vaas_os/target/x86_64-unknown-none/debug/.fingerprint/vaas_os-7877702ed7ed88b0/test-bin-vaas_os`
 
 Caused by:
     No such file or directory (os error 2)

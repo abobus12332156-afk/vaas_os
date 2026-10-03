@@ -4,7 +4,7 @@
 
 use bootloader::BootInfo;
 use core::panic::PanicInfo;
-use x86_64::VirtAddr; // ПОДТИГНУЛИ ДЛЯ СМЕЩЕНИЯ ПАМЯТИ
+use x86_64::VirtAddr;
 
 extern crate alloc;
 
@@ -12,8 +12,8 @@ mod interrupts;
 mod vga_buffer;
 
 pub mod allocator;
-pub mod memory;
 pub mod gdt;
+pub mod memory;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -22,6 +22,48 @@ fn panic(info: &PanicInfo) -> ! {
     loop {
         x86_64::instructions::hlt();
     }
+}
+
+fn print_cpu_info() {
+    use core::arch::x86_64::__cpuid;
+
+    let vendor_leaf = unsafe { __cpuid(0) };
+    let mut vendor_bytes = [0_u8; 12];
+    vendor_bytes[0..4].copy_from_slice(&vendor_leaf.ebx.to_le_bytes());
+    vendor_bytes[4..8].copy_from_slice(&vendor_leaf.edx.to_le_bytes());
+    vendor_bytes[8..12].copy_from_slice(&vendor_leaf.ecx.to_le_bytes());
+
+    let vendor = core::str::from_utf8(&vendor_bytes).unwrap();
+    println!("CPU Vendor: {}", vendor);
+
+    let max_extended_leaf = unsafe { __cpuid(0x8000_0000) }.eax;
+    if max_extended_leaf < 0x8000_0000 {
+        println!("CPU model: brand string unavilable");
+        return;
+    }
+
+    let mut brand_bytes = [0_u8; 48];
+    for (index, leaf) in (0x8000_0002..=0x8000_0004).enumerate() {
+        let result = unsafe { __cpuid(leaf) };
+        let registers = [result.eax, result.ebx, result.ecx, result.edx];
+
+        for (chunk, register) in brand_bytes[index * 16..(index + 1) * 16]
+            .chunks_exact_mut(4)
+            .zip(registers)
+        {
+            chunk.copy_from_slice(&register.to_le_bytes());
+        }
+    }
+
+    let brand_len = brand_bytes
+        .iter()
+        .position(|&byte| byte == 0)
+        .unwrap_or(brand_bytes.len());
+    let brand = core::str::from_utf8(&brand_bytes[..brand_len])
+        .unwrap_or("Unknown")
+        .trim();
+
+    println!("CPU model: {}", brand);
 }
 
 fn match_color(color_str: &str) -> Option<vga_buffer::Color> {
@@ -72,7 +114,7 @@ enum Command<'a> {
     CpuInfo,
     MemInfo,
     Ticks,
-    Cls,
+    Cl,
     Version,
     About,
     Clear,
@@ -101,14 +143,14 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     println!("--------------------------------------------");
 
     // ИСПРАВЛЕНО: Сначала шьем новую GDT и TSS, чтобы у процессора были валидные стеки!
-    gdt::init(); 
+    gdt::init();
 
     // Только теперь накатываем таблицу прерываний
     interrupts::init_idt();
-    
+
     // Инициализируем контроллер прерываний
     unsafe { interrupts::PICS.lock().initialize() };
-    
+
     // И только когда вся инфраструктура готова — врубаем прерывания
     x86_64::instructions::interrupts::enable();
 
@@ -116,21 +158,20 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     // УБИРАЕМ ХАРДКОД: вместо VirtAddr::new(0x_0000_4000_0000_0000);
     // БЕРЕМ РЕАЛЬНОЕ СМЕЩЕНИЕ, КОТОРОЕ НАМ ДАЛ БУТЛОАДЕР:
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
-    
+
     // Настраиваем маппер страниц
     let mut mapper = unsafe { memory::init(phys_mem_offset) };
 
     // Передаем карту памяти в аллокатор фреймов
-    let mut frame_allocator = unsafe {
-        memory::BootInfoFrameAllocator::init(&boot_info.memory_map)
-    };
+    let mut frame_allocator =
+        unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
     // Запуск аллокатора страниц кучи
     allocator::init_heap(&mut mapper, &mut frame_allocator)
         .expect("HEAP INITIALIZATION FAILED! Kernel panic.");
 
     println!("Heap allocator loaded successfully!");
-    
+
     // ТЕСТ-ДРАЙВ ДИНАМИЧЕСКОЙ ПАМЯТИ
     use alloc::boxed::Box;
     use alloc::vec::Vec;
@@ -138,7 +179,11 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let mut test_vec = Vec::new();
     test_vec.push(1);
     test_vec.push(2);
-    println!("Heap test: Box value = {}, Vec capacity = {}", test_box, test_vec.capacity());
+    println!(
+        "Heap test: Box value = {}, Vec capacity = {}",
+        test_box,
+        test_vec.capacity()
+    );
     println!("--------------------------------------------");
     print!("vaash> ");
 
@@ -186,8 +231,8 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
                     Command::MemInfo
                 } else if trimmed == "ticks" {
                     Command::Ticks
-                } else if trimmed == "cls" {
-                    Command::Cls
+                } else if trimmed == "cl" {
+                    Command::Cl
                 } else if trimmed == "version" {
                     Command::Version
                 } else if trimmed == "about" {
@@ -226,7 +271,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
                         println!(" cpuinfo   - Display CPU brand and details");
                         println!(" meminfo   - Display memory status");
                         println!(" ticks     - Show raw timer ticks (alias for time)");
-                        println!(" cls       - Clear the screen (alias for clear)");
+                        println!(" cl        - Clear the screen (alias for clear)");
                         println!(" version   - Display kernel version info");
                         println!(" about     - More info about vaas_os");
                         println!(" clear     - Clear the screen");
@@ -243,7 +288,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
                     Command::Version => {
                         println!("vaash v0.1.0 (x86_64 bare-metal), built in 2026.")
                     }
-                    Command::Clear | Command::Cls => crate::vga_buffer::clear(),
+                    Command::Clear | Command::Cl => crate::vga_buffer::clear(),
                     Command::Panic => panic!("User requested kernel panic!"),
                     Command::Echo(args) => println!("{}", args),
                     Command::Color(color_arg) => {
@@ -299,17 +344,23 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
                     Command::Vaasfetch => {
                         let uptime_sec = interrupts::get_uptime_seconds();
                         let ticks = unsafe { interrupts::TIMER_TICKS };
-                        
+
                         // Логотип vaash
-                        crate::vga_buffer::set_color(vga_buffer::Color::LightGreen, vga_buffer::Color::Black);
+                        crate::vga_buffer::set_color(
+                            vga_buffer::Color::LightGreen,
+                            vga_buffer::Color::Black,
+                        );
                         println!("  __      __                 _     ");
                         println!("  \\ \\    / /                | |    ");
                         println!("   \\ \\  / /_ _  __ _ ___  __| |__  ");
                         println!("    \\ \\/ / _` |/ _` / __|/ _` '_ \\ ");
                         println!("     \\  / (_| | (_| \\__ \\ (_| | | |");
                         println!("      \\/ \\__,_|\\__,_|___/\\__,_|_| |_|");
-                        
-                        crate::vga_buffer::set_color(vga_buffer::Color::LightGreen, vga_buffer::Color::Black);
+
+                        crate::vga_buffer::set_color(
+                            vga_buffer::Color::LightGreen,
+                            vga_buffer::Color::Black,
+                        );
                         println!("-----------------------------------------");
                         println!("OS:        vaas_os v0.1.0 (x86_64 bare-metal)");
                         println!("Shell:     vaash v0.1.0");
@@ -332,7 +383,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
                             println!("Unknown command: '{}'", trimmed);
                         }
                     }
-                    Command::CpuInfo => todo!(),
+                    Command::CpuInfo => print_cpu_info(),
                 }
                 print!("vaash> ");
             }
