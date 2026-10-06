@@ -1,6 +1,5 @@
 ./target/*
 .idea/
-.cargo/
 ./target
 /target/
 target/
