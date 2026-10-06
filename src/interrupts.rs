@@ -121,6 +121,8 @@ static mut CMD_BUFFER: [u8; CMD_BUFFER_SIZE] = [0u8; CMD_BUFFER_SIZE];
 static mut CMD_LEN: usize = 0;
 static mut CMD_READY: bool = false;
 
+static mut CMD_CURSOR: usize = 0;
+
 static mut SHIFT_PRESSED: bool = false;
 
 /// Функция для извлечения готовой команды (исправили опечатку в названии!)
@@ -131,6 +133,7 @@ pub fn get_command() -> Option<[u8; CMD_BUFFER_SIZE]> {
             // И здесь заменяем на чистый инициализатор без 'as'
             CMD_BUFFER = [0u8; CMD_BUFFER_SIZE];
             CMD_LEN = 0;
+            CMD_CURSOR = 0;
             CMD_READY = false;
             Some(res)
         } else {
@@ -152,13 +155,25 @@ extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
 
+    let is_extended = unsafe {
+        let was_extended = EXTENDED_SCANCODE;
+        EXTENDED_SCANCODE = scancode == 0xE0;
+        was_extended
+    };
+
     unsafe {
         match scancode {
-            0x4b => {
-                // Стрелка влево нажата
+            0x4b if is_extended => {
+                if !CMD_READY && CMD_CURSOR > 0 {
+                    CMD_CURSOR -= 1;
+                    crate::vga_buffer::move_cursor_left();
+                }
             }
-            0x4d => {
-                // Стрелка вправо нажата
+            0x4d if is_extended => {
+                if !CMD_READY && CMD_CURSOR < CMD_LEN {
+                    CMD_CURSOR += 1;
+                    crate::vga_buffer::move_cursor_right();
+                }
             }
             // Нажатие Левого или Правого Shift
             0x2a | 0x36 => {
@@ -169,18 +184,20 @@ extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
                 SHIFT_PRESSED = false;
             }
             // Обрабатываем остальные нажатия клавиш (коды < 0x80)
-            0x00..=0x7f => {
+            0x00..=0x7f if !is_extended => {
                 if !CMD_READY {
                     match scancode {
                         // Нажатие Enter
                         0x1c => {
                             print!("\n");
                             CMD_READY = true;
+                            CMD_CURSOR = CMD_LEN;
                         }
                         // Нажатие Backspace
                         0x0e => {
                             if CMD_LEN > 0 {
                                 CMD_LEN -= 1;
+                                CMD_CURSOR = CMD_LEN;
                                 CMD_BUFFER[CMD_LEN] = 0;
                                 crate::vga_buffer::backspace();
                             }
@@ -239,6 +256,7 @@ extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
                                 if CMD_LEN < CMD_BUFFER_SIZE - 1 {
                                     CMD_BUFFER[CMD_LEN] = byte;
                                     CMD_LEN += 1;
+                                    CMD_CURSOR = CMD_LEN;
                                     print!("{}", byte as char);
                                 }
                             }

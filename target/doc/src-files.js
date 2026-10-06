@@ -1,2 +1,0 @@
-createSrcSidebar('[["rustversion",["",[],["attr.rs","bound.rs","constfn.rs","date.rs","error.rs","expand.rs","expr.rs","iter.rs","lib.rs","release.rs","time.rs","token.rs","version.rs"]]]]');
-//{"start":19,"fragment_lengths":[168]}

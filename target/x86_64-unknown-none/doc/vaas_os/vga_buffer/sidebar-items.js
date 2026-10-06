@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BUFFER_HEIGHT","BUFFER_WIDTH"],"enum":["Color"],"fn":["backspace","clear","set_color"],"static":["WRITER"],"struct":["Buffer","ColorCode","ScreenChar","Writer"]};

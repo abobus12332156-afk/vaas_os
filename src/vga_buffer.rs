@@ -1,5 +1,6 @@
 use core::fmt;
 use spin::Mutex;
+use x86_64::instructions::port::Port;
 
 /// Перечисление стандартных цветов VGA
 #[allow(dead_code)]
@@ -59,6 +60,7 @@ pub struct Writer {
     column_position: usize,
     color_code: ColorCode,
     buffer: *mut Buffer,
+    hardware_cursor_position: usize,
 }
 
 // Явно говорим компилятору, что Writer можно пересылать между потоками
@@ -134,10 +136,8 @@ impl Writer {
         }
     }
 
-    fn update_hardware_cursor(&self) {
-        use x86_64::instructions::port::Port;
-
-        let position = if self.column_position >= BUFFER_WIDTH {
+    fn update_hardware_cursor(&mut self) {
+        self.hardware_cursor_position = if self.column_position >= BUFFER_WIDTH {
             if self.row_position + 1 < BUFFER_HEIGHT {
                 (self.row_position + 1) * BUFFER_WIDTH
             } else {
@@ -145,16 +145,37 @@ impl Writer {
             }
         } else {
             self.row_position * BUFFER_WIDTH + self.column_position
-        } as u16;
+        };
 
+        self.write_hardware_cursor_position();
+    }
+
+    fn write_hardware_cursor_position(&self) {
+        use x86_64::instructions::port::Port;
+
+        let position = self.hardware_cursor_position as u16;
         let mut command_port = Port::new(0x3D4);
         let mut data_port = Port::new(0x3D5);
 
         unsafe {
-            command_port.write(0x0F);
+            command_port.write(0x0F_u8);
             data_port.write(position as u8);
-            command_port.write(0x0E);
+            command_port.write(0x0E_u8);
             data_port.write((position >> 8) as u8);
+        }
+    }
+
+    pub fn move_hardware_cursor_left(&mut self) {
+        if self.hardware_cursor_position > 0 {
+            self.hardware_cursor_position -= 1;
+            self.write_hardware_cursor_position();
+        }
+    }
+
+    pub fn move_hardware_cursor_right(&mut self) {
+        if self.hardware_cursor_position + 1 < BUFFER_HEIGHT * BUFFER_WIDTH {
+            self.hardware_cursor_position += 1;
+            self.write_hardware_cursor_position();
         }
     }
 
@@ -176,14 +197,14 @@ impl Writer {
             }
 
             self.row_position -= 1;
-            self.column_position = BUFFER_HEIGHT;
+            self.column_position = BUFFER_WIDTH;
         }
 
         self.column_position -= 1;
 
         unsafe {
             core::ptr::write_volatile(
-                &mut (self.buffer).chars[self.row_position][self.column_position],
+                &mut (*(self.buffer)).chars[self.row_position][self.column_position],
                 ScreenChar {
                     ascii_character: b' ',
                     color_code: self.color_code,
@@ -217,6 +238,14 @@ pub fn backspace() {
     WRITER.lock().delete_last_char();
 }
 
+pub fn move_cursor_left() {
+    WRITER.lock().move_hardware_cursor_left();
+}
+
+pub fn move_cursor_right() {
+    WRITER.lock().move_hardware_cursor_right();
+}
+
 pub fn set_color(foreground: Color, background: Color) {
     WRITER.lock().set_color(foreground, background);
 }
@@ -237,6 +266,7 @@ pub static WRITER: Mutex<Writer> = Mutex::new(Writer {
     column_position: 0,
     color_code: ColorCode((Color::Black as u8) << 4 | (Color::LightGreen as u8)),
     buffer: 0xb8000 as *mut Buffer,
+    hardware_cursor_position: 0,
 });
 
 /// Функция, которую будут дергать макросы print! и println! под капотом
